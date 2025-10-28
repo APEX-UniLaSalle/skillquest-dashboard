@@ -21,7 +21,7 @@ def load_data():
     """Loads, cleans, and aggregates the session data from the Excel file."""
     
     # IMPORTANT: The Excel file must be present in the deployment directory.
-    excel_file_name = "data.xlsx"
+    excel_file_name = "data2.xlsx"
     sheet_name = "Sheet1" 
     
     try:
@@ -104,7 +104,7 @@ inscrits_autonomie = df_autonomie['Inscriptions'].sum()
 # --- 3. Header and KPI Display ---
 
 st.title("🎯 Tableau de Bord de Suivi des Inscriptions SkillQuest")
-st.markdown("Vue d'ensemble et analyse des indicateurs clés de performance (KPI) basés sur le fichier **`data.xlsx`**.")
+st.markdown("Vue d'ensemble et analyse des indicateurs clés de performance (KPI) basés sur le fichier **`data2.xlsx`**.")
 st.markdown("---")
 
 st.header("🔑 Métriques Globales de Performance")
@@ -200,38 +200,70 @@ fig1 = px.line(
 fig1.update_layout(hovermode="x unified")
 st.plotly_chart(fig1, use_container_width=True)
 
-# Chart 2: Autonomie vs. Présentiel Proportion (Global Only)
-st.subheader("2. Évolution Autonomie vs. Présentiel (Proportion)")
+# Chart 2: Répartition Autonomie / Autonomie tutorée / Enseignements (Global Only)
+st.subheader("2. Évolution Autonomie / Autonomie tutorée / Enseignements (Proportion)")
 if selected_intervenant == 'Tous les Intervenants':
-    
-    df_time_long = df_time[['Date', 'Inscrits_Autonomie', 'Inscrits_Presentiel']].melt(
-        id_vars=['Date'], 
-        value_vars=['Inscrits_Autonomie', 'Inscrits_Presentiel'],
-        var_name='Modalité',
-        value_name='Inscriptions'
-    )
-    df_time_long['Modalité'] = df_time_long['Modalité'].replace({
-        'Inscrits_Autonomie': 'Autonomie',
-        'Inscrits_Presentiel': 'Présentiel'
-    })
+    # On repart de df_sessions_clean car on a besoin de la colonne 'Défi'
+    df_mod = df_sessions_clean.copy()
 
-    fig_time_split = px.area(
-        df_time_long,
+    # Catégorisation à 3 modalités
+    def _map_modalite(defi_value: str) -> str:
+        d = str(defi_value).strip().lower()
+        if 'autonomie tutor' in d:
+            return 'Autonomie tutorée'
+        if d == 'autonomie':
+            return 'Autonomie'
+        return 'Enseignements'
+
+    df_mod['Modalité3'] = df_mod['Défi'].apply(_map_modalite)
+
+    # Agrégation quotidienne des inscriptions par modalité
+    df_time3 = (
+        df_mod.groupby(['Date', 'Modalité3'])['Inscriptions']
+        .sum()
+        .reset_index()
+    )
+
+    # On filtre les jours réellement actifs (au moins 1 inscription)
+    active_days = (
+        df_time3.groupby('Date')['Inscriptions'].sum().reset_index(name='TotalJour')
+    )
+    active_days = active_days[active_days['TotalJour'] > 0]
+    df_time3 = df_time3.merge(active_days[['Date']], on='Date', how='inner')
+
+    # Mise en forme longue déjà OK pour area % (groupnorm='percent')
+    fig_time_split3 = px.area(
+        df_time3,
         x='Date',
         y='Inscriptions',
-        color='Modalité',
-        title='Proportion Quotidienne des Inscriptions (Autonomie vs. Présentiel)',
-        labels={'Inscriptions': 'Proportion (%)', 'Date': 'Date', 'Modalité': 'Modalité'},
-        color_discrete_map={'Autonomie': '#F39C12', 'Présentiel': '#2ECC71'},
+        color='Modalité3',
+        title='Proportion quotidienne des inscriptions par modalité',
+        labels={'Inscriptions': 'Proportion (%)', 'Date': 'Date', 'Modalité3': 'Modalité'},
+        # Couleurs lisibles (on garde une palette soft cohérente)
+        color_discrete_map={
+            'Autonomie': '#F39C12',           # orange
+            'Autonomie tutorée': '#8E44AD',   # violet
+            'Enseignements': '#2ECC71'        # vert
+        },
         groupnorm='percent'
     )
+    fig_time_split3 = px.area(
+    df_time3,
+    x='Date',
+    y='Inscriptions',
+    color='Modalité3',
+    category_orders={"Modalité3": ["Enseignements", "Autonomie tutorée", "Autonomie"]},
+    title='Proportion quotidienne des inscriptions par modalité',
+    labels={'Inscriptions': 'Proportion (%)', 'Date': 'Date', 'Modalité3': 'Modalité'},
+    color_discrete_map={
+        'Autonomie': '#F39C12',           
+        'Autonomie tutorée': '#8E44AD',
+        'Enseignements': '#2ECC71'        
+    },
+    groupnorm='percent'
+)
 
-    fig_time_split.update_layout(
-        yaxis_tickformat=".0%",
-        hovermode="x unified",
-        yaxis_title='Proportion Quotidienne (%)'
-    )
-    st.plotly_chart(fig_time_split, use_container_width=True)
+    st.plotly_chart(fig_time_split3, use_container_width=True)
 else:
     st.info("Ce graphique est désactivé lorsque vous filtrez par un Intervenant spécifique, car il est conçu pour montrer la répartition globale.")
 

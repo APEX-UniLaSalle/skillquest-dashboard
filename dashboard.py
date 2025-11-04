@@ -12,6 +12,7 @@ FILE_NAMES = [
     "xp_SkillQuest_2025-10-08.xlsx",
     "xp_SkillQuest_2025-10-14.xlsx",
     "xp_SkillQuest_2025-10-24.xlsx",
+    "xp_SkillQuest_2025-11-04.xlsx",
     "xp_SkillQuest_2025-11-04.xlsx"
 ]
 
